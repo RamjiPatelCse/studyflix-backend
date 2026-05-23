@@ -4,18 +4,24 @@ const cors = require("cors");
 const app = express();
 
 app.use(cors());
-app.use(express.json());
 
-const PORT = 5000;
+app.use(express.json({
+  limit: "50mb"
+}));
 
-let database = {};
+app.use(express.urlencoded({
+  extended: true,
+  limit: "50mb"
+}));
 
+// TEST
 app.get("/", (req, res) => {
 
-  res.send("Server Running 😄");
+  res.send("StudyFlix Backend Running 😄");
 
 });
 
+// UPLOAD API
 app.post("/api/upload", async (req, res) => {
 
   try {
@@ -23,203 +29,87 @@ app.post("/api/upload", async (req, res) => {
     const {
       batchName,
       thumbnail,
-      text
+      text,
+      price
     } = req.body;
 
-    const lines =
-    text.split("\n");
+    if (!batchName || !text) {
 
-    let folders = {};
-
-    for (let line of lines) {
-
-      if (
-        !line.includes("http")
-      ) continue;
-
-      const parts =
-      line.split(": https");
-
-      if (!parts[1])
-      continue;
-
-      const title =
-      parts[0]?.trim();
-
-      const url =
-      "https" +
-      parts[1];
-
-      const matches =
-      [...title.matchAll(/\((.*?)\)/g)];
-
-      const folder1 =
-      matches[0]?.[1] ||
-      "Others";
-
-      const folder2 =
-      matches[1]?.[1] ||
-      "Videos";
-
-      const folder3 =
-      matches[2]?.[1] ||
-      "Lectures";
-
-      const cleanTitle =
-      title
-      .replace(/\(.*?\)/g, "")
-      .replace(/:/g, "")
-      .trim();
-
-      if (!folders[folder1]) {
-
-        folders[folder1] = {};
-
-      }
-
-      if (
-        !folders[folder1][folder2]
-      ) {
-
-        folders[folder1][folder2] = {};
-
-      }
-
-      if (
-        !folders[folder1][folder2][folder3]
-      ) {
-
-        folders[folder1][folder2][folder3] = [];
-
-      }
-
-      folders[
-        folder1
-      ][
-        folder2
-      ][
-        folder3
-      ].push({
-
-        id:
-        Date.now() +
-        Math.random(),
-
-        title:
-        cleanTitle,
-
-        url,
-
-        thumbnail:
-        thumbnail ||
-
-        "https://i.imgur.com/8Km9tLL.jpeg"
-
+      return res.status(400).json({
+        success: false,
+        message: "Missing Data"
       });
 
     }
 
-    database[batchName] =
-    folders;
+    const lines =
+      text
+      .split("\n")
+      .filter(x => x.trim());
 
-    res.json({
+    const lectures = [];
 
-      success:true,
-      data:database
+    lines.forEach((line, index) => {
 
-    });
+      const parts = line.split(": ");
 
-  } catch (error) {
+      if (parts.length >= 2) {
 
-    console.log(error);
+        lectures.push({
 
-    res.json({
+          id: Date.now() + index,
 
-      success:false,
-      message:"Server Error"
+          title: parts[0],
 
-    });
+          videoUrl: parts.slice(1).join(": "),
 
-  }
-
-});
-
-app.get("/api/data",
-(req, res) => {
-
-  res.json(database);
-
-});
-
-app.post("/api/watch",
-(req, res) => {
-
-  const { id } =
-  req.body;
-
-  let found = null;
-
-  Object.values(database)
-  .forEach(batch => {
-
-    Object.values(batch)
-    .forEach(level1 => {
-
-      Object.values(level1)
-      .forEach(level2 => {
-
-        Object.values(level2)
-        .forEach(lectures => {
-
-          lectures.forEach(item => {
-
-            if (
-
-              String(item.id)
-              ===
-              String(id)
-
-            ) {
-
-              found = item;
-
-            }
-
-          });
+          thumbnail
 
         });
 
-      });
+      }
 
     });
 
-  });
-
-  if (!found) {
-
     return res.json({
 
-      success:false
+      success: true,
+
+      batch: {
+
+        id: Date.now(),
+
+        title: batchName,
+
+        thumbnail,
+
+        price,
+
+        lectures
+
+      }
+
+    });
+
+  } catch (err) {
+
+    console.log(err);
+
+    return res.status(500).json({
+
+      success: false,
+      message: "Server Error 😄"
 
     });
 
   }
 
-  res.json({
-
-    success:true,
-
-    player:
-    found.url
-
-  });
-
 });
+
+const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
 
-  console.log(
-    "Server Running 😄"
-  );
+  console.log("Server Running 😄");
 
 });
