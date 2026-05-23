@@ -1,6 +1,5 @@
 const express = require("express");
 const cors = require("cors");
-const axios = require("axios");
 
 const app = express();
 
@@ -11,11 +10,21 @@ const PORT = 5000;
 
 let database = {};
 
+app.get("/", (req, res) => {
+
+  res.send("Server Running 😄");
+
+});
+
 app.post("/api/upload", async (req, res) => {
 
   try {
 
-    const { text } = req.body;
+    const {
+      batchName,
+      thumbnail,
+      text
+    } = req.body;
 
     const lines =
     text.split("\n");
@@ -24,11 +33,15 @@ app.post("/api/upload", async (req, res) => {
 
     for (let line of lines) {
 
-      if (!line.includes("http"))
-      continue;
+      if (
+        !line.includes("http")
+      ) continue;
 
       const parts =
       line.split(": https");
+
+      if (!parts[1])
+      continue;
 
       const title =
       parts[0]?.trim();
@@ -98,26 +111,32 @@ app.post("/api/upload", async (req, res) => {
         url,
 
         thumbnail:
+        thumbnail ||
+
         "https://i.imgur.com/8Km9tLL.jpeg"
 
       });
 
     }
 
-    database = folders;
+    database[batchName] =
+    folders;
 
     res.json({
 
-      success: true,
-      data: database
+      success:true,
+      data:database
 
     });
 
-  } catch (err) {
+  } catch (error) {
+
+    console.log(error);
 
     res.json({
 
-      success: false
+      success:false,
+      message:"Server Error"
 
     });
 
@@ -141,24 +160,32 @@ app.post("/api/watch",
   let found = null;
 
   Object.values(database)
-  .forEach(level1 => {
+  .forEach(batch => {
 
-    Object.values(level1)
-    .forEach(level2 => {
+    Object.values(batch)
+    .forEach(level1 => {
 
-      Object.values(level2)
-      .forEach(lectures => {
+      Object.values(level1)
+      .forEach(level2 => {
 
-        lectures.forEach(item => {
+        Object.values(level2)
+        .forEach(lectures => {
 
-          if (
-            String(item.id) ===
-            String(id)
-          ) {
+          lectures.forEach(item => {
 
-            found = item;
+            if (
 
-          }
+              String(item.id)
+              ===
+              String(id)
+
+            ) {
+
+              found = item;
+
+            }
+
+          });
 
         });
 
