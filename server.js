@@ -10,19 +10,83 @@ app.use(express.json({ limit: "50mb" }));
 const DATA_FILE = "./data.json";
 
 function readData() {
+
   if (!fs.existsSync(DATA_FILE)) {
+
     fs.writeFileSync(DATA_FILE, "[]");
+
   }
 
-  return JSON.parse(fs.readFileSync(DATA_FILE));
+  return JSON.parse(
+    fs.readFileSync(DATA_FILE)
+  );
+
 }
 
 function saveData(data) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+
+  fs.writeFileSync(
+    DATA_FILE,
+    JSON.stringify(data, null, 2)
+  );
+
 }
 
 app.get("/", (req, res) => {
+
   res.send("StudyFlix Backend Running 😄🔥");
+
+});
+
+
+
+// ================= PLAYER URL =================
+
+app.get("/play/:id", async (req, res) => {
+
+  try {
+
+    const id = req.params.id;
+
+    const api =
+      `https://thin-wynnie-appx-d3d205f7.koyeb.app/play/${id}`;
+
+    const response =
+      await fetch(api);
+
+    const data =
+      await response.json();
+
+    const finalPlayer =
+
+      data.video_player_url +
+
+      data.video_player_token;
+
+    res.json({
+
+      success: true,
+
+      player_url: finalPlayer
+
+    });
+
+  }
+
+  catch (err) {
+
+    console.log(err);
+
+    res.status(500).json({
+
+      success: false,
+
+      message: "Player Error"
+
+    });
+
+  }
+
 });
 
 
@@ -33,15 +97,24 @@ app.post("/create-batch", async (req, res) => {
 
   try {
 
-    const { title, thumbnail, lectures } = req.body;
+    const {
+      title,
+      thumbnail,
+      lectures
+    } = req.body;
 
     const data = readData();
 
     const batch = {
+
       id: Date.now(),
+
       title,
+
       thumbnail,
+
       lectures
+
     };
 
     data.push(batch);
@@ -49,17 +122,25 @@ app.post("/create-batch", async (req, res) => {
     saveData(data);
 
     res.json({
+
       success: true,
+
       message: "Batch Created 😄🔥"
+
     });
 
-  } catch (err) {
+  }
+
+  catch (err) {
 
     console.log(err);
 
     res.status(500).json({
+
       success: false,
+
       message: "Server Error 😅"
+
     });
 
   }
@@ -87,7 +168,9 @@ app.get("/batch/:id", (req, res) => {
   const data = readData();
 
   const batch = data.find(
+
     item => item.id == req.params.id
+
   );
 
   res.json(batch);
@@ -103,13 +186,17 @@ app.delete("/delete-batch/:id", (req, res) => {
   const data = readData();
 
   const newData = data.filter(
+
     item => item.id != req.params.id
+
   );
 
   saveData(newData);
 
   res.json({
+
     success: true
+
   });
 
 });
@@ -119,5 +206,7 @@ app.delete("/delete-batch/:id", (req, res) => {
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
+
   console.log("Server Running 😄🔥");
+
 });
