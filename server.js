@@ -3,132 +3,149 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
-const jwt = require("jsonwebtoken");
 const multer = require("multer");
 
 const app = express();
 
 app.use(cors());
+
 app.use(express.json());
 
+const storage =
+multer.memoryStorage();
 
-
-// MEMORY STORAGE
-
-const storage = multer.memoryStorage();
-
-const upload = multer({
-  storage: storage
-});
-
-
-
-// TEMP BATCH STORAGE
+const upload =
+multer({ storage });
 
 let batches = [];
 
 
 
-// HOME
-
 app.get("/", (req, res) => {
 
-  res.send("StudyFlix Backend Running 🚀");
+  res.send(
+    "StudyFlix Backend Running 🚀"
+  );
 
 });
 
 
-
-// LOGIN API
-
-app.post("/api/login", (req, res) => {
-
-  const { username, password } = req.body;
-
-  if (
-    username === process.env.ADMIN_USER &&
-    password === process.env.ADMIN_PASS
-  ) {
-
-    const token = jwt.sign(
-      { username },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: "7d"
-      }
-    );
-
-    return res.json({
-      success: true,
-      token
-    });
-
-  }
-
-  res.status(401).json({
-    success: false,
-    error: "Invalid Credentials"
-  });
-
-});
-
-
-
-// CREATE BATCH
 
 app.post(
+
   "/api/create-batch",
+
   upload.single("txt"),
-  (req, res) => {
+
+  async (req, res) => {
 
     try {
 
-      const { batchName, thumbnail } = req.body;
+      const {
+        batchName,
+        thumbnail
+      } = req.body;
 
-      const txtData = req.file.buffer.toString();
+      const text =
+      req.file.buffer.toString();
 
-      const lines = txtData
-        .split("\n")
-        .filter(line => line.trim() !== "");
+      const lines =
+      text.split("\n");
 
-      const lectures = [];
+      const folders = {};
 
-      for (let i = 0; i < lines.length; i += 2) {
+      lines.forEach((line) => {
 
-        const title = lines[i];
+        if (
+          line.includes("http")
+        ) {
 
-        const url = lines[i + 1];
+          if (
+            line.includes(".pdf")
+          ) return;
 
-        if (title && url) {
+          const parts =
+          line.split(":");
 
-          lectures.push({
+          const title =
+          parts[0]?.trim();
+
+          const url =
+          parts.slice(1).join(":").trim();
+
+          const matches =
+          [...title.matchAll(/\((.*?)\)/g)];
+
+          const subject =
+          matches[0]?.[1] || "Others";
+
+          const chapter =
+          matches[2]?.[1] || "Videos";
+
+          if (!folders[subject]) {
+
+            folders[subject] = {};
+
+          }
+
+          if (
+            !folders[subject][chapter]
+          ) {
+
+            folders[subject][chapter] = [];
+
+          }
+
+          folders[subject][chapter]
+          .push({
+
+            id:
+            Date.now() +
+            Math.random(),
+
             title,
-            url
+
+            url,
+
+            thumbnail:
+            "https://i.imgur.com/8Km9tLL.jpeg"
+
           });
 
         }
 
-      }
+      });
 
       const batch = {
+
         id: Date.now(),
+
         batchName,
+
         thumbnail,
-        lectures
+
+        folders
+
       };
 
       batches.push(batch);
 
       res.json({
-        success: true,
+
+        success:true,
+
         batch
+
       });
 
     } catch (error) {
 
-      res.status(500).json({
-        success: false,
-        error: error.message
+      res.json({
+
+        success:false,
+
+        error:error.message
+
       });
 
     }
@@ -138,80 +155,128 @@ app.post(
 
 
 
-// GET ALL BATCHES
+app.get(
+  "/api/batches",
 
-app.get("/api/batches", (req, res) => {
+  (req, res) => {
 
-  res.json({
-    success: true,
-    batches
-  });
+    res.json({
 
-});
+      success:true,
+
+      batches
+
+    });
+
+  }
+);
 
 
 
-// UPDATE BATCH
+app.delete(
+
+  "/api/delete-batch/:id",
+
+  (req, res) => {
+
+    const id =
+    Number(req.params.id);
+
+    batches =
+    batches.filter(
+
+      (batch) =>
+      batch.id !== id
+
+    );
+
+    res.json({
+
+      success:true
+
+    });
+
+  }
+);
+
+
 
 app.post(
-  "/api/update-batch/:id",
-  upload.single("txt"),
-  (req, res) => {
+
+  "/api/watch",
+
+  async (req, res) => {
 
     try {
 
-      const id = Number(req.params.id);
+      const { id } = req.body;
 
-      const batch = batches.find(
-        b => b.id === id
-      );
+      let realUrl = "";
 
-      if (!batch) {
+      batches.forEach((batch) => {
 
-        return res.status(404).json({
-          success: false,
-          error: "Batch not found"
+        Object.keys(
+          batch.folders
+        ).forEach((subject) => {
+
+          Object.keys(
+            batch.folders[subject]
+          ).forEach((chapter) => {
+
+            batch
+            .folders[subject][chapter]
+            .forEach((lecture) => {
+
+              if (
+                lecture.id == id
+              ) {
+
+                realUrl =
+                lecture.url;
+
+              }
+
+            });
+
+          });
+
+        });
+
+      });
+
+      if (!realUrl) {
+
+        return res.json({
+
+          success:false
+
         });
 
       }
 
-      const txtData = req.file.buffer.toString();
+      const response =
+      await axios.get(realUrl);
 
-      const lines = txtData
-        .split("\n")
-        .filter(line => line.trim() !== "");
+      const data =
+      response.data;
 
-      for (let i = 0; i < lines.length; i += 2) {
-
-        const title = lines[i];
-
-        const url = lines[i + 1];
-
-        const exists = batch.lectures.find(
-          l => l.title === title
-        );
-
-        if (!exists) {
-
-          batch.lectures.push({
-            title,
-            url
-          });
-
-        }
-
-      }
+      const player =
+      `${data.video_player_url}${data.video_player_token}`;
 
       res.json({
-        success: true,
-        batch
+
+        success:true,
+
+        player
+
       });
 
     } catch (error) {
 
-      res.status(500).json({
-        success: false,
-        error: error.message
+      res.json({
+
+        success:false
+
       });
 
     }
@@ -221,56 +286,13 @@ app.post(
 
 
 
-// VIDEO TOKEN API
-
-app.get("/api/get-video", async (req, res) => {
-
-  try {
-
-    const url = req.query.url;
-
-    if (!url) {
-
-      return res.status(400).json({
-        success: false,
-        error: "URL required"
-      });
-
-    }
-
-    const response = await axios.get(url);
-
-    const data = response.data;
-
-    const playerUrl = data.video_player_url;
-
-    const token = data.video_player_token;
-
-    const finalPlayer = `${playerUrl}${token}`;
-
-    res.json({
-      success: true,
-      player: finalPlayer,
-      token
-    });
-
-  } catch (error) {
-
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-
-  }
-
-});
-
-
-
-const PORT = process.env.PORT || 5000;
+const PORT =
+process.env.PORT || 5000;
 
 app.listen(PORT, () => {
 
-  console.log(`Server running on port ${PORT}`);
+  console.log(
+    `Server running on ${PORT}`
+  );
 
 });
