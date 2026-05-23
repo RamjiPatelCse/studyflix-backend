@@ -1,298 +1,198 @@
-require("dotenv").config();
-
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
-const multer = require("multer");
 
 const app = express();
 
 app.use(cors());
-
 app.use(express.json());
 
-const storage =
-multer.memoryStorage();
+const PORT = 5000;
 
-const upload =
-multer({ storage });
+let database = {};
 
-let batches = [];
+app.post("/api/upload", async (req, res) => {
 
+  try {
 
+    const { text } = req.body;
 
-app.get("/", (req, res) => {
+    const lines =
+    text.split("\n");
 
-  res.send(
-    "StudyFlix Backend Running 🚀"
-  );
+    let folders = {};
 
-});
+    for (let line of lines) {
 
+      if (!line.includes("http"))
+      continue;
 
+      const parts =
+      line.split(": https");
 
-app.post(
+      const title =
+      parts[0]?.trim();
 
-  "/api/create-batch",
+      const url =
+      "https" +
+      parts[1];
 
-  upload.single("txt"),
+      const matches =
+      [...title.matchAll(/\((.*?)\)/g)];
 
-  async (req, res) => {
+      const folder1 =
+      matches[0]?.[1] ||
+      "Others";
 
-    try {
+      const folder2 =
+      matches[1]?.[1] ||
+      "Videos";
 
-      const {
-        batchName,
-        thumbnail
-      } = req.body;
+      const folder3 =
+      matches[2]?.[1] ||
+      "Lectures";
 
-      const text =
-      req.file.buffer.toString();
+      const cleanTitle =
+      title
+      .replace(/\(.*?\)/g, "")
+      .replace(/:/g, "")
+      .trim();
 
-      const lines =
-      text.split("\n");
+      if (!folders[folder1]) {
 
-      const folders = {};
-
-      lines.forEach((line) => {
-
-        if (
-          line.includes("http")
-        ) {
-
-          if (
-            line.includes(".pdf")
-          ) return;
-
-          const parts =
-          line.split(":");
-
-          const title =
-          parts[0]?.trim();
-
-          const url =
-          parts.slice(1).join(":").trim();
-
-          const matches =
-          [...title.matchAll(/\((.*?)\)/g)];
-
-          const subject =
-          matches[0]?.[1] || "Others";
-
-          const chapter =
-          matches[2]?.[1] || "Videos";
-
-          if (!folders[subject]) {
-
-            folders[subject] = {};
-
-          }
-
-          if (
-            !folders[subject][chapter]
-          ) {
-
-            folders[subject][chapter] = [];
-
-          }
-
-          folders[subject][chapter]
-          .push({
-
-            id:
-            Date.now() +
-            Math.random(),
-
-            title,
-
-            url,
-
-            thumbnail:
-            "https://i.imgur.com/8Km9tLL.jpeg"
-
-          });
-
-        }
-
-      });
-
-      const batch = {
-
-        id: Date.now(),
-
-        batchName,
-
-        thumbnail,
-
-        folders
-
-      };
-
-      batches.push(batch);
-
-      res.json({
-
-        success:true,
-
-        batch
-
-      });
-
-    } catch (error) {
-
-      res.json({
-
-        success:false,
-
-        error:error.message
-
-      });
-
-    }
-
-  }
-);
-
-
-
-app.get(
-  "/api/batches",
-
-  (req, res) => {
-
-    res.json({
-
-      success:true,
-
-      batches
-
-    });
-
-  }
-);
-
-
-
-app.delete(
-
-  "/api/delete-batch/:id",
-
-  (req, res) => {
-
-    const id =
-    Number(req.params.id);
-
-    batches =
-    batches.filter(
-
-      (batch) =>
-      batch.id !== id
-
-    );
-
-    res.json({
-
-      success:true
-
-    });
-
-  }
-);
-
-
-
-app.post(
-
-  "/api/watch",
-
-  async (req, res) => {
-
-    try {
-
-      const { id } = req.body;
-
-      let realUrl = "";
-
-      batches.forEach((batch) => {
-
-        Object.keys(
-          batch.folders
-        ).forEach((subject) => {
-
-          Object.keys(
-            batch.folders[subject]
-          ).forEach((chapter) => {
-
-            batch
-            .folders[subject][chapter]
-            .forEach((lecture) => {
-
-              if (
-                lecture.id == id
-              ) {
-
-                realUrl =
-                lecture.url;
-
-              }
-
-            });
-
-          });
-
-        });
-
-      });
-
-      if (!realUrl) {
-
-        return res.json({
-
-          success:false
-
-        });
+        folders[folder1] = {};
 
       }
 
-      const response =
-      await axios.get(realUrl);
+      if (
+        !folders[folder1][folder2]
+      ) {
 
-      const data =
-      response.data;
+        folders[folder1][folder2] = {};
 
-      const player =
-      `${data.video_player_url}${data.video_player_token}`;
+      }
 
-      res.json({
+      if (
+        !folders[folder1][folder2][folder3]
+      ) {
 
-        success:true,
+        folders[folder1][folder2][folder3] = [];
 
-        player
+      }
 
-      });
+      folders[
+        folder1
+      ][
+        folder2
+      ][
+        folder3
+      ].push({
 
-    } catch (error) {
+        id:
+        Date.now() +
+        Math.random(),
 
-      res.json({
+        title:
+        cleanTitle,
 
-        success:false
+        url,
+
+        thumbnail:
+        "https://i.imgur.com/8Km9tLL.jpeg"
 
       });
 
     }
 
+    database = folders;
+
+    res.json({
+
+      success: true,
+      data: database
+
+    });
+
+  } catch (err) {
+
+    res.json({
+
+      success: false
+
+    });
+
   }
-);
 
+});
 
+app.get("/api/data",
+(req, res) => {
 
-const PORT =
-process.env.PORT || 5000;
+  res.json(database);
+
+});
+
+app.post("/api/watch",
+(req, res) => {
+
+  const { id } =
+  req.body;
+
+  let found = null;
+
+  Object.values(database)
+  .forEach(level1 => {
+
+    Object.values(level1)
+    .forEach(level2 => {
+
+      Object.values(level2)
+      .forEach(lectures => {
+
+        lectures.forEach(item => {
+
+          if (
+            String(item.id) ===
+            String(id)
+          ) {
+
+            found = item;
+
+          }
+
+        });
+
+      });
+
+    });
+
+  });
+
+  if (!found) {
+
+    return res.json({
+
+      success:false
+
+    });
+
+  }
+
+  res.json({
+
+    success:true,
+
+    player:
+    found.url
+
+  });
+
+});
 
 app.listen(PORT, () => {
 
   console.log(
-    `Server running on ${PORT}`
+    "Server Running 😄"
   );
 
 });
