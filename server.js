@@ -1,115 +1,123 @@
 const express = require("express");
 const cors = require("cors");
+const fs = require("fs");
 
 const app = express();
 
 app.use(cors());
+app.use(express.json({ limit: "50mb" }));
 
-app.use(express.json({
-  limit: "50mb"
-}));
+const DATA_FILE = "./data.json";
 
-app.use(express.urlencoded({
-  extended: true,
-  limit: "50mb"
-}));
+function readData() {
+  if (!fs.existsSync(DATA_FILE)) {
+    fs.writeFileSync(DATA_FILE, "[]");
+  }
 
-// TEST
+  return JSON.parse(fs.readFileSync(DATA_FILE));
+}
+
+function saveData(data) {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+}
+
 app.get("/", (req, res) => {
-
-  res.send("StudyFlix Backend Running 😄");
-
+  res.send("StudyFlix Backend Running 😄🔥");
 });
 
-// UPLOAD API
-app.post("/api/upload", async (req, res) => {
+
+
+// ================= CREATE BATCH =================
+
+app.post("/create-batch", async (req, res) => {
 
   try {
 
-    const {
-      batchName,
+    const { title, thumbnail, lectures } = req.body;
+
+    const data = readData();
+
+    const batch = {
+      id: Date.now(),
+      title,
       thumbnail,
-      text,
-      price
-    } = req.body;
+      lectures
+    };
 
-    if (!batchName || !text) {
+    data.push(batch);
 
-      return res.status(400).json({
-        success: false,
-        message: "Missing Data"
-      });
+    saveData(data);
 
-    }
-
-    const lines =
-      text
-      .split("\n")
-      .filter(x => x.trim());
-
-    const lectures = [];
-
-    lines.forEach((line, index) => {
-
-      const parts = line.split(": ");
-
-      if (parts.length >= 2) {
-
-        lectures.push({
-
-          id: Date.now() + index,
-
-          title: parts[0],
-
-          videoUrl: parts.slice(1).join(": "),
-
-          thumbnail
-
-        });
-
-      }
-
-    });
-
-    return res.json({
-
+    res.json({
       success: true,
-
-      batch: {
-
-        id: Date.now(),
-
-        title: batchName,
-
-        thumbnail,
-
-        price,
-
-        lectures
-
-      }
-
+      message: "Batch Created 😄🔥"
     });
 
   } catch (err) {
 
     console.log(err);
 
-    return res.status(500).json({
-
+    res.status(500).json({
       success: false,
-      message: "Server Error 😄"
-
+      message: "Server Error 😅"
     });
 
   }
 
 });
 
+
+
+// ================= GET BATCHES =================
+
+app.get("/batches", (req, res) => {
+
+  const data = readData();
+
+  res.json(data);
+
+});
+
+
+
+// ================= GET SINGLE BATCH =================
+
+app.get("/batch/:id", (req, res) => {
+
+  const data = readData();
+
+  const batch = data.find(
+    item => item.id == req.params.id
+  );
+
+  res.json(batch);
+
+});
+
+
+
+// ================= DELETE =================
+
+app.delete("/delete-batch/:id", (req, res) => {
+
+  const data = readData();
+
+  const newData = data.filter(
+    item => item.id != req.params.id
+  );
+
+  saveData(newData);
+
+  res.json({
+    success: true
+  });
+
+});
+
+
+
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-
-  console.log("Server Running 😄");
-
+  console.log("Server Running 😄🔥");
 });
