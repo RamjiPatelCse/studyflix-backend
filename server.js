@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const fs = require("fs");
+const axios = require("axios");
 
 const app = express();
 
@@ -10,79 +11,81 @@ app.use(express.json({ limit: "50mb" }));
 const DATA_FILE = "./data.json";
 
 function readData() {
-
   if (!fs.existsSync(DATA_FILE)) {
-
     fs.writeFileSync(DATA_FILE, "[]");
-
   }
 
-  return JSON.parse(
-    fs.readFileSync(DATA_FILE)
-  );
-
+  return JSON.parse(fs.readFileSync(DATA_FILE));
 }
 
 function saveData(data) {
-
-  fs.writeFileSync(
-    DATA_FILE,
-    JSON.stringify(data, null, 2)
-  );
-
+  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
 app.get("/", (req, res) => {
-
   res.send("StudyFlix Backend Running 😄🔥");
-
 });
 
 
 
-// ================= PLAYER URL =================
+// ================= PLAYER FETCH =================
 
-app.get("/play/:id", async (req, res) => {
+app.get("/jay/*", async (req, res) => {
 
   try {
 
-    const id = req.params.id;
+    const fullUrl = decodeURIComponent(
+      req.params[0]
+    );
 
-    const api =
-      `https://thin-wynnie-appx-d3d205f7.koyeb.app/play/${id}`;
+    // thin wala id nikalna 😎
+    const videoId = fullUrl
+      .split("/play/")[1]
+      ?.split("/main.m3u8")[0];
 
-    const response =
-      await fetch(api);
+    if (!videoId) {
 
-    const data =
-      await response.json();
+      return res.json({
+        success: false,
+        message: "Invalid URL 😅"
+      });
 
-    const finalPlayer =
+    }
 
-      data.video_player_url +
+    // thin backend fetch 😎🔥
+    const apiUrl =
+      `https://thin-wynnie-appx-d3d205f7.koyeb.app/play/${videoId}`;
 
+    const response = await axios.get(apiUrl);
+
+    const data = response.data;
+
+    const token =
       data.video_player_token;
 
-    res.json({
+    if (!token) {
 
-      success: true,
+      return res.json({
+        success: false,
+        message: "Token Not Found 😅"
+      });
 
-      player_url: finalPlayer
+    }
 
-    });
+    // FINAL PLAYER URL 😎🔥
+    const finalPlayerUrl =
+      `https://player.appx.co.in/secure-player?isMobile=true&token=${token}`;
 
-  }
+    // direct redirect 😎🔥
+    return res.redirect(finalPlayerUrl);
 
-  catch (err) {
+  } catch (err) {
 
     console.log(err);
 
     res.status(500).json({
-
       success: false,
-
-      message: "Player Error"
-
+      message: "Server Error 😅"
     });
 
   }
@@ -97,24 +100,15 @@ app.post("/create-batch", async (req, res) => {
 
   try {
 
-    const {
-      title,
-      thumbnail,
-      lectures
-    } = req.body;
+    const { title, thumbnail, lectures } = req.body;
 
     const data = readData();
 
     const batch = {
-
       id: Date.now(),
-
       title,
-
       thumbnail,
-
       lectures
-
     };
 
     data.push(batch);
@@ -122,25 +116,17 @@ app.post("/create-batch", async (req, res) => {
     saveData(data);
 
     res.json({
-
       success: true,
-
       message: "Batch Created 😄🔥"
-
     });
 
-  }
-
-  catch (err) {
+  } catch (err) {
 
     console.log(err);
 
     res.status(500).json({
-
       success: false,
-
       message: "Server Error 😅"
-
     });
 
   }
@@ -168,9 +154,7 @@ app.get("/batch/:id", (req, res) => {
   const data = readData();
 
   const batch = data.find(
-
     item => item.id == req.params.id
-
   );
 
   res.json(batch);
@@ -186,17 +170,13 @@ app.delete("/delete-batch/:id", (req, res) => {
   const data = readData();
 
   const newData = data.filter(
-
     item => item.id != req.params.id
-
   );
 
   saveData(newData);
 
   res.json({
-
     success: true
-
   });
 
 });
@@ -206,7 +186,5 @@ app.delete("/delete-batch/:id", (req, res) => {
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-
   console.log("Server Running 😄🔥");
-
 });
