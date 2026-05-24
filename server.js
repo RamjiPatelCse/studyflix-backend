@@ -20,13 +20,27 @@ app.use(express.urlencoded({
   limit: "100mb"
 }));
 
+// ======================================
+// MONGODB
+// ======================================
+
 mongoose.connect(process.env.MONGODB_URI)
+
 .then(() => {
+
   console.log("MongoDB Connected 😄");
+
 })
+
 .catch((err) => {
+
   console.log(err);
+
 });
+
+// ======================================
+// SCHEMA
+// ======================================
 
 const VideoSchema = new mongoose.Schema({
 
@@ -57,20 +71,34 @@ const Batch = mongoose.model(
   BatchSchema
 );
 
+// ======================================
+// ENCRYPT
+// ======================================
+
 function encrypt(text){
 
   return CryptoJS.AES.encrypt(
+
     text,
+
     process.env.SECRET_KEY
+
   ).toString();
 
 }
 
+// ======================================
+// DECRYPT
+// ======================================
+
 function decrypt(text){
 
   const bytes = CryptoJS.AES.decrypt(
+
     text,
+
     process.env.SECRET_KEY
+
   );
 
   return bytes.toString(
@@ -79,6 +107,10 @@ function decrypt(text){
 
 }
 
+// ======================================
+// HOME
+// ======================================
+
 app.get("/", (req, res) => {
 
   res.send(
@@ -86,6 +118,10 @@ app.get("/", (req, res) => {
   );
 
 });
+
+// ======================================
+// UPLOAD TXT
+// ======================================
 
 app.post("/api/upload", async(req, res) => {
 
@@ -100,7 +136,9 @@ app.post("/api/upload", async(req, res) => {
     if(!text){
 
       return res.status(400).json({
+
         error: "TXT content missing"
+
       });
 
     }
@@ -115,6 +153,10 @@ app.post("/api/upload", async(req, res) => {
 
     const videos = [];
 
+    // ==================================
+    // LOOP
+    // ==================================
+
     for(let raw of lines){
 
       const line = raw.trim();
@@ -122,49 +164,92 @@ app.post("/api/upload", async(req, res) => {
       if(!line) continue;
 
       const matches =
+
         [...line.matchAll(/\((.*?)\)/g)];
 
+      // ==================================
       // SUBJECT
+      // ==================================
+
       if(matches.length >= 1){
 
         currentSubject =
+
           matches[0][1]
+
           .replace("🔴","")
+
           .replace("✅","")
+
           .trim();
 
       }
 
-      // TYPE
-      if(matches.length >= 2){
+      // ==================================
+      // TWO FOLDER SUPPORT
+      // ==================================
 
-        currentType =
+      if(matches.length === 2){
+
+        // DEFAULT TYPE
+        currentType = "Default";
+
+        // CHAPTER
+        currentChapter =
+
           matches[1][1]
+
           .replace("🔴","")
+
           .replace("✅","")
+
           .trim();
 
       }
 
-      // DYNAMIC CHAPTER
+      // ==================================
+      // THREE FOLDER SUPPORT
+      // ==================================
+
       if(matches.length >= 3){
 
-        currentChapter =
-          matches[matches.length - 1][1]
+        // TYPE
+        currentType =
+
+          matches[1][1]
+
           .replace("🔴","")
+
           .replace("✅","")
+
+          .trim();
+
+        // CHAPTER
+        currentChapter =
+
+          matches[matches.length - 1][1]
+
+          .replace("🔴","")
+
+          .replace("✅","")
+
           .trim();
 
       }
 
+      // ==================================
+      // VIDEO URL
+      // ==================================
+
       const urlMatch =
+
         line.match(/https:\/\/\S+/);
 
       if(urlMatch){
 
         const url = urlMatch[0];
 
-        // PDF skip
+        // SKIP PDF
         if(
           url.includes(".pdf")
         ){
@@ -174,6 +259,7 @@ app.post("/api/upload", async(req, res) => {
         }
 
         let lectureTitle =
+
           line.split(":")[0]
           .trim();
 
@@ -181,8 +267,7 @@ app.post("/api/upload", async(req, res) => {
           lectureTitle.includes("https")
         ){
 
-          lectureTitle =
-            "Lecture";
+          lectureTitle = "Lecture";
 
         }
 
@@ -203,6 +288,10 @@ app.post("/api/upload", async(req, res) => {
       }
 
     }
+
+    // ==================================
+    // SAVE
+    // ==================================
 
     const batch = await Batch.create({
 
@@ -240,6 +329,10 @@ app.post("/api/upload", async(req, res) => {
 
 });
 
+// ======================================
+// GET BATCHES
+// ======================================
+
 app.get("/api/batches", async(req, res) => {
 
   try {
@@ -262,6 +355,10 @@ app.get("/api/batches", async(req, res) => {
   }
 
 });
+
+// ======================================
+// DELETE BATCH
+// ======================================
 
 app.delete("/api/batch/:id", async(req, res) => {
 
@@ -291,6 +388,10 @@ app.delete("/api/batch/:id", async(req, res) => {
 
 });
 
+// ======================================
+// PLAY VIDEO
+// ======================================
+
 app.get("/api/play/:batchId/:videoId", async(req, res) => {
 
   try {
@@ -306,7 +407,9 @@ app.get("/api/play/:batchId/:videoId", async(req, res) => {
     if(!batch){
 
       return res.status(404).json({
+
         error: "Batch not found"
+
       });
 
     }
@@ -317,13 +420,19 @@ app.get("/api/play/:batchId/:videoId", async(req, res) => {
     if(!video){
 
       return res.status(404).json({
+
         error: "Video not found"
+
       });
 
     }
 
     const realUrl =
       decrypt(video.url);
+
+    // ==================================
+    // FETCH PLAYER
+    // ==================================
 
     const response =
       await axios.get(realUrl);
@@ -340,7 +449,9 @@ app.get("/api/play/:batchId/:videoId", async(req, res) => {
     ){
 
       return res.status(400).json({
+
         error: "Player token missing"
+
       });
 
     }
@@ -372,13 +483,19 @@ app.get("/api/play/:batchId/:videoId", async(req, res) => {
 
 });
 
+// ======================================
+// PORT
+// ======================================
+
 const PORT =
   process.env.PORT || 5000;
 
 app.listen(PORT, () => {
 
   console.log(
+
     `Server Running On Port ${PORT}`
+
   );
 
 });
