@@ -22,7 +22,7 @@ app.use(express.urlencoded({
 
 mongoose.connect(process.env.MONGODB_URI)
 .then(() => {
-  console.log("MongoDB Connected");
+  console.log("MongoDB Connected 😄");
 })
 .catch((err) => {
   console.log(err);
@@ -57,7 +57,7 @@ const Batch = mongoose.model(
   BatchSchema
 );
 
-function encrypt(text) {
+function encrypt(text){
 
   return CryptoJS.AES.encrypt(
     text,
@@ -66,7 +66,7 @@ function encrypt(text) {
 
 }
 
-function decrypt(text) {
+function decrypt(text){
 
   const bytes = CryptoJS.AES.decrypt(
     text,
@@ -107,80 +107,92 @@ app.post("/api/upload", async(req, res) => {
 
     const lines = text.split("\n");
 
-    let subject = "";
+    let currentSubject = "";
 
-    let type = "";
+    let currentType = "";
 
-    let chapter = "";
+    let currentChapter = "";
 
     const videos = [];
 
-    for(let line of lines){
+    for(let raw of lines){
 
-      line = line.trim();
+      const line = raw.trim();
 
-      if(
-        line.startsWith("(") &&
-        line.includes(")")
-      ){
+      if(!line) continue;
 
-        const value = line
-          .replace(/[()]/g, "")
+      const matches =
+        [...line.matchAll(/\((.*?)\)/g)];
+
+      if(matches.length >= 1){
+
+        currentSubject =
+          matches[0][1]
+          .replace("🔴","")
+          .replace("✅","")
           .trim();
-
-        if(
-          value.includes("Live")
-        ){
-
-          type = "Live";
-
-        }
-
-        else if(
-          value.includes("Recorded")
-        ){
-
-          type = "Recorded";
-
-        }
-
-        else if(!subject){
-
-          subject = value;
-
-        }
-
-        else{
-
-          chapter = value;
-
-        }
 
       }
 
-      if(
-        line.includes("https://")
-      ){
+      if(matches.length >= 2){
+
+        currentType =
+          matches[1][1]
+          .replace("🔴","")
+          .replace("✅","")
+          .trim();
+
+      }
+
+      if(matches.length >= 3){
+
+        currentChapter =
+          matches[2][1]
+          .replace("🔴","")
+          .replace("✅","")
+          .trim();
+
+      }
+
+      const urlMatch =
+        line.match(/https:\/\/\S+/);
+
+      if(urlMatch){
+
+        const url = urlMatch[0];
 
         if(
-          line.includes(".pdf")
+          url.includes(".pdf")
         ){
 
           continue;
 
         }
 
+        let lectureTitle =
+          line.split(":")[0]
+          .trim();
+
+        if(
+          lectureTitle.includes("https")
+        ){
+
+          lectureTitle =
+            "Lecture";
+
+        }
+
         videos.push({
 
-          title: "Lecture",
+          title: lectureTitle,
 
-          subject,
+          subject: currentSubject,
 
-          type,
+          type: currentType,
 
-          chapter,
+          chapter: currentChapter,
 
-          url: encrypt(line)
+          url: encrypt(url)
 
         });
 
@@ -201,6 +213,8 @@ app.post("/api/upload", async(req, res) => {
     res.json({
 
       success: true,
+
+      totalVideos: videos.length,
 
       batch
 
@@ -226,7 +240,8 @@ app.get("/api/batches", async(req, res) => {
 
   try {
 
-    const batches = await Batch.find();
+    const batches =
+      await Batch.find();
 
     res.json(batches);
 
@@ -272,26 +287,36 @@ app.delete("/api/batch/:id", async(req, res) => {
 
 });
 
-app.get("/api/play/:id", async(req, res) => {
+app.get("/api/play/:batchId/:videoId", async(req, res) => {
 
   try {
 
-    const batch =
-      await Batch.findOne();
+    const {
+      batchId,
+      videoId
+    } = req.params;
 
-    if(
-      !batch ||
-      !batch.videos.length
-    ){
+    const batch =
+      await Batch.findById(batchId);
+
+    if(!batch){
 
       return res.status(404).json({
-        error: "No videos found"
+        error: "Batch not found"
       });
 
     }
 
     const video =
-      batch.videos[0];
+      batch.videos.id(videoId);
+
+    if(!video){
+
+      return res.status(404).json({
+        error: "Video not found"
+      });
+
+    }
 
     const realUrl =
       decrypt(video.url);
@@ -311,7 +336,7 @@ app.get("/api/play/:id", async(req, res) => {
     ){
 
       return res.status(400).json({
-        error: "Token not found"
+        error: "Player token missing"
       });
 
     }
@@ -320,6 +345,8 @@ app.get("/api/play/:id", async(req, res) => {
       player + token;
 
     res.json({
+
+      success: true,
 
       url: finalUrl
 
@@ -347,7 +374,7 @@ const PORT =
 app.listen(PORT, () => {
 
   console.log(
-    "Server Running"
+    `Server Running On Port ${PORT}`
   );
 
 });
