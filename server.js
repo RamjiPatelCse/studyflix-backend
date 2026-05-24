@@ -1,190 +1,180 @@
 const express = require("express");
 const cors = require("cors");
-const fs = require("fs");
+const dotenv = require("dotenv");
+const mongoose = require("mongoose");
 const axios = require("axios");
+const CryptoJS = require("crypto-js");
+
+dotenv.config();
 
 const app = express();
 
 app.use(cors());
-app.use(express.json({ limit: "50mb" }));
+app.use(express.json());
 
-const DATA_FILE = "./data.json";
-
-function readData() {
-  if (!fs.existsSync(DATA_FILE)) {
-    fs.writeFileSync(DATA_FILE, "[]");
-  }
-
-  return JSON.parse(fs.readFileSync(DATA_FILE));
-}
-
-function saveData(data) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-}
-
-app.get("/", (req, res) => {
-  res.send("StudyFlix Backend Running 😄🔥");
+mongoose.connect(process.env.MONGODB_URI)
+.then(()=>{
+  console.log("MongoDB Connected");
+})
+.catch((err)=>{
+  console.log(err);
 });
 
-
-
-// ================= PLAYER FETCH =================
-
-app.get("/jay/*", async (req, res) => {
-
-  try {
-
-    const fullUrl = decodeURIComponent(
-      req.params[0]
-    );
-
-    // thin wala id nikalna 😎
-    const videoId = fullUrl
-      .split("/play/")[1]
-      ?.split("/main.m3u8")[0];
-
-    if (!videoId) {
-
-      return res.json({
-        success: false,
-        message: "Invalid URL 😅"
-      });
-
-    }
-
-    // thin backend fetch 😎🔥
-    const apiUrl =
-      `https://thin-wynnie-appx-d3d205f7.koyeb.app/play/${videoId}`;
-
-    const response = await axios.get(apiUrl);
-
-    const data = response.data;
-
-    const token =
-      data.video_player_token;
-
-    if (!token) {
-
-      return res.json({
-        success: false,
-        message: "Token Not Found 😅"
-      });
-
-    }
-
-    // FINAL PLAYER URL 😎🔥
-    const finalPlayerUrl =
-      `https://player.appx.co.in/secure-player?isMobile=true&token=${token}`;
-
-    // direct redirect 😎🔥
-    return res.redirect(finalPlayerUrl);
-
-  } catch (err) {
-
-    console.log(err);
-
-    res.status(500).json({
-      success: false,
-      message: "Server Error 😅"
-    });
-
-  }
-
+const BatchSchema = new mongoose.Schema({
+  title:String,
+  thumbnail:String,
+  videos:Array
 });
 
+const Batch = mongoose.model("Batch", BatchSchema);
 
+function encrypt(text){
+  return CryptoJS.AES.encrypt(
+    text,
+    process.env.SECRET_KEY
+  ).toString();
+}
 
-// ================= CREATE BATCH =================
+function decrypt(text){
+  const bytes = CryptoJS.AES.decrypt(
+    text,
+    process.env.SECRET_KEY
+  );
 
-app.post("/create-batch", async (req, res) => {
+  return bytes.toString(CryptoJS.enc.Utf8);
+}
 
-  try {
+app.get("/",(req,res)=>{
+  res.send("StudyFlix Backend Running");
+});
 
-    const { title, thumbnail, lectures } = req.body;
+app.post("/api/upload", async(req,res)=>{
 
-    const data = readData();
+  try{
 
-    const batch = {
-      id: Date.now(),
+    const {
       title,
       thumbnail,
-      lectures
-    };
+      text
+    } = req.body;
 
-    data.push(batch);
+    const lines = text.split("\\n");
 
-    saveData(data);
+    let subject = "";
+    let type = "";
+    let chapter = "";
 
-    res.json({
-      success: true,
-      message: "Batch Created 😄🔥"
+    const videos = [];
+
+    for(let line of lines){
+
+      if(line.startsWith("(")){
+
+        const value =
+          line.replace(/[()]/g,"").trim();
+
+        if(!subject){
+          subject = value;
+        }
+        else if(!type){
+          type = value;
+        }
+        else{
+          chapter = value;
+        }
+
+      }
+
+      if(line.includes("https://")){
+
+        if(line.includes(".pdf")) continue;
+
+        videos.push({
+          title:"Lecture",
+          subject,
+          type,
+          chapter,
+          url: encrypt(line.trim())
+        });
+
+      }
+
+    }
+
+    const batch = await Batch.create({
+      title,
+      thumbnail,
+      videos
     });
 
-  } catch (err) {
+    res.json(batch);
 
-    console.log(err);
+  }
+  catch(err){
 
     res.status(500).json({
-      success: false,
-      message: "Server Error 😅"
+      error:err.message
     });
 
   }
 
 });
 
+app.get("/api/batches", async(req,res)=>{
 
+  const batches = await Batch.find();
 
-// ================= GET BATCHES =================
-
-app.get("/batches", (req, res) => {
-
-  const data = readData();
-
-  res.json(data);
+  res.json(batches);
 
 });
 
+app.delete("/api/batch/:id", async(req,res)=>{
 
-
-// ================= GET SINGLE BATCH =================
-
-app.get("/batch/:id", (req, res) => {
-
-  const data = readData();
-
-  const batch = data.find(
-    item => item.id == req.params.id
-  );
-
-  res.json(batch);
-
-});
-
-
-
-// ================= DELETE =================
-
-app.delete("/delete-batch/:id", (req, res) => {
-
-  const data = readData();
-
-  const newData = data.filter(
-    item => item.id != req.params.id
-  );
-
-  saveData(newData);
+  await Batch.findByIdAndDelete(req.params.id);
 
   res.json({
-    success: true
+    success:true
   });
 
 });
 
+app.get("/api/play/:id", async(req,res)=>{
 
+  try{
+
+    const batch = await Batch.findOne();
+
+    const video = batch.videos[0];
+
+    const realUrl = decrypt(video.url);
+
+    const response = await axios.get(realUrl);
+
+    const token =
+      response.data.video_player_token;
+
+    const player =
+      response.data.video_player_url;
+
+    const finalUrl = player + token;
+
+    res.json({
+      url: finalUrl
+    });
+
+  }
+  catch(err){
+
+    res.status(500).json({
+      error:err.message
+    });
+
+  }
+
+});
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log("Server Running 😄🔥");
+app.listen(PORT,()=>{
+  console.log("Server Running");
 });
