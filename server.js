@@ -22,21 +22,21 @@ app.use(express.urlencoded({
 
 mongoose.connect(process.env.MONGODB_URI)
 .then(() => {
+
   console.log("MongoDB Connected 😄");
+
 })
 .catch((err) => {
+
   console.log(err);
+
 });
 
 const VideoSchema = new mongoose.Schema({
 
   title: String,
 
-  subject: String,
-
-  type: String,
-
-  chapter: String,
+  folders: [String],
 
   url: String
 
@@ -100,20 +100,18 @@ app.post("/api/upload", async(req, res) => {
     if(!text){
 
       return res.status(400).json({
+
         error: "TXT content missing"
+
       });
 
     }
 
     const lines = text.split("\n");
 
-    let currentSubject = "";
-
-    let currentType = "";
-
-    let currentChapter = "";
-
     const videos = [];
+
+    let folders = [];
 
     for(let raw of lines){
 
@@ -121,36 +119,26 @@ app.post("/api/upload", async(req, res) => {
 
       if(!line) continue;
 
-      const matches =
+      const bracketMatches =
         [...line.matchAll(/\((.*?)\)/g)];
 
-      if(matches.length >= 1){
+      if(
+        bracketMatches.length > 0 &&
+        !line.includes("https://")
+      ){
 
-        currentSubject =
-          matches[0][1]
-          .replace("🔴","")
-          .replace("✅","")
-          .trim();
+        folders =
+          bracketMatches.map(
+            (m)=>
 
-      }
+              m[1]
+              .replace("🔴","")
+              .replace("✅","")
+              .trim()
 
-      if(matches.length >= 2){
+          );
 
-        currentType =
-          matches[1][1]
-          .replace("🔴","")
-          .replace("✅","")
-          .trim();
-
-      }
-
-      if(matches.length >= 3){
-
-        currentChapter =
-          matches[2][1]
-          .replace("🔴","")
-          .replace("✅","")
-          .trim();
+        continue;
 
       }
 
@@ -186,11 +174,7 @@ app.post("/api/upload", async(req, res) => {
 
           title: lectureTitle,
 
-          subject: currentSubject,
-
-          type: currentType,
-
-          chapter: currentChapter,
+          folders,
 
           url: encrypt(url)
 
@@ -302,7 +286,9 @@ app.get("/api/play/:batchId/:videoId", async(req, res) => {
     if(!batch){
 
       return res.status(404).json({
+
         error: "Batch not found"
+
       });
 
     }
@@ -313,7 +299,9 @@ app.get("/api/play/:batchId/:videoId", async(req, res) => {
     if(!video){
 
       return res.status(404).json({
+
         error: "Video not found"
+
       });
 
     }
@@ -336,7 +324,9 @@ app.get("/api/play/:batchId/:videoId", async(req, res) => {
     ){
 
       return res.status(400).json({
+
         error: "Player token missing"
+
       });
 
     }
