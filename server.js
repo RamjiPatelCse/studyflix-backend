@@ -1,233 +1,226 @@
 const express = require("express");
-const mongoose = require("mongoose");
 const cors = require("cors");
+const dotenv = require("dotenv");
+const mongoose = require("mongoose");
 const axios = require("axios");
-require("dotenv").config();
+const CryptoJS = require("crypto-js");
+
+dotenv.config();
 
 const app = express();
 
 app.use(cors());
 
 app.use(express.json({
-  limit: "50mb"
+  limit: "100mb"
 }));
 
 app.use(express.urlencoded({
   extended: true,
-  limit: "50mb"
+  limit: "100mb"
 }));
 
-
-// ============================
-// MONGODB
-// ============================
-
-mongoose.connect(
-  process.env.MONGODB_URI
-)
-.then(()=>{
-
-  console.log(
-    "MongoDB Connected"
-  );
-
+mongoose.connect(process.env.MONGODB_URI)
+.then(() => {
+  console.log("MongoDB Connected 😄");
 })
-.catch((err)=>{
-
+.catch((err) => {
   console.log(err);
+});
+
+const VideoSchema = new mongoose.Schema({
+
+  title: String,
+
+  subject: String,
+
+  type: String,
+
+  chapter: String,
+
+  url: String
 
 });
 
-
-// ============================
-// SCHEMA
-// ============================
-
-const BatchSchema =
-new mongoose.Schema({
+const BatchSchema = new mongoose.Schema({
 
   title: String,
 
   thumbnail: String,
 
-  videos: Array
+  videos: [VideoSchema]
 
 });
 
-const Batch =
-mongoose.model(
+const Batch = mongoose.model(
   "Batch",
   BatchSchema
 );
 
+function encrypt(text){
 
-// ============================
-// HOME
-// ============================
+  return CryptoJS.AES.encrypt(
+    text,
+    process.env.SECRET_KEY
+  ).toString();
 
-app.get("/",(req,res)=>{
+}
+
+function decrypt(text){
+
+  const bytes = CryptoJS.AES.decrypt(
+    text,
+    process.env.SECRET_KEY
+  );
+
+  return bytes.toString(
+    CryptoJS.enc.Utf8
+  );
+
+}
+
+app.get("/", (req, res) => {
 
   res.send(
-    "Server Running"
+    "StudyFlix Backend Running 😄"
   );
 
 });
 
+app.post("/api/upload", async(req, res) => {
 
-// ============================
-// UPLOAD
-// ============================
-
-app.post(
-"/api/upload",
-async(req,res)=>{
-
-  try{
+  try {
 
     const {
       title,
       thumbnail,
-      content
+      text
     } = req.body;
 
-    if(!content){
+    if(!text){
 
       return res.status(400).json({
-
-        error:
-        "TXT content missing"
-
+        error: "TXT content missing"
       });
 
     }
 
-    const lines =
-      content.split("\n");
+    const lines = text.split("\n");
 
-    let videos = [];
+    let currentSubject = "";
 
-    lines.forEach((line)=>{
+    let currentType = "";
 
-      if(
-        !line.includes("https")
-      ) return;
+    let currentChapter = "";
 
-      // BRACKETS
-      const brackets =
-        line.match(/\((.*?)\)/g) || [];
+    const videos = [];
 
-      const clean =
-        brackets.map((b)=>
+    for(let raw of lines){
 
-          b.replace(/[()]/g,"").trim()
+      const line = raw.trim();
 
-        );
+      if(!line) continue;
 
-      // URL
+      const matches =
+        [...line.matchAll(/\((.*?)\)/g)];
+
+      // SUBJECT
+      if(matches.length >= 1){
+
+        currentSubject =
+          matches[0][1]
+          .replace("🔴","")
+          .replace("✅","")
+          .trim();
+
+      }
+
+      // TYPE
+      if(matches.length >= 2){
+
+        currentType =
+          matches[1][1]
+          .replace("🔴","")
+          .replace("✅","")
+          .trim();
+
+      }
+
+      // DYNAMIC CHAPTER
+      if(matches.length >= 3){
+
+        currentChapter =
+          matches[matches.length - 1][1]
+          .replace("🔴","")
+          .replace("✅","")
+          .trim();
+
+      }
+
       const urlMatch =
-        line.match(
-          /https:\/\/[^\s]+/g
-        );
+        line.match(/https:\/\/\S+/);
 
-      if(!urlMatch) return;
+      if(urlMatch){
 
-      const url =
-        urlMatch[0];
+        const url = urlMatch[0];
 
-      // TITLE
-      const lectureTitle =
-        line
-        .split(":")[0]
-        .trim();
+        // PDF skip
+        if(
+          url.includes(".pdf")
+        ){
 
-      let subject = "";
-      let type = "";
-      let chapter = "";
+          continue;
 
-      // ========================
-      // AUTO DETECT
-      // ========================
+        }
 
-      if(clean.length >= 3){
+        let lectureTitle =
+          line.split(":")[0]
+          .trim();
 
-        subject =
-          clean[0];
+        if(
+          lectureTitle.includes("https")
+        ){
 
-        type =
-          clean[1];
+          lectureTitle =
+            "Lecture";
 
-        chapter =
-          clean[2];
+        }
 
-      }
+        videos.push({
 
-      else if(clean.length === 2){
+          title: lectureTitle,
 
-        subject =
-          clean[0];
+          subject: currentSubject,
 
-        type =
-          clean[1];
+          type: currentType,
 
-        chapter =
-          "Videos";
+          chapter: currentChapter,
+
+          url: encrypt(url)
+
+        });
 
       }
 
-      else if(clean.length === 1){
+    }
 
-        subject =
-          clean[0];
+    const batch = await Batch.create({
 
-        type =
-          "Lectures";
+      title,
 
-        chapter =
-          "Videos";
+      thumbnail,
 
-      }
-
-      // PUSH
-      videos.push({
-
-        title:
-          lectureTitle,
-
-        subject,
-
-        type,
-
-        chapter,
-
-        url,
-
-        thumbnail:
-        "https://i.imgur.com/8Km9tLL.png"
-
-      });
+      videos
 
     });
-
-    // SAVE
-    const batch =
-      new Batch({
-
-        title,
-
-        thumbnail,
-
-        videos
-
-      });
-
-    await batch.save();
 
     res.json({
 
       success: true,
 
-      total:
-        videos.length
+      totalVideos: videos.length,
+
+      batch
 
     });
 
@@ -239,8 +232,7 @@ async(req,res)=>{
 
     res.status(500).json({
 
-      error:
-        err.message
+      error: err.message
 
     });
 
@@ -248,16 +240,9 @@ async(req,res)=>{
 
 });
 
+app.get("/api/batches", async(req, res) => {
 
-// ============================
-// GET BATCHES
-// ============================
-
-app.get(
-"/api/batches",
-async(req,res)=>{
-
-  try{
+  try {
 
     const batches =
       await Batch.find();
@@ -270,8 +255,7 @@ async(req,res)=>{
 
     res.status(500).json({
 
-      error:
-        err.message
+      error: err.message
 
     });
 
@@ -279,16 +263,9 @@ async(req,res)=>{
 
 });
 
+app.delete("/api/batch/:id", async(req, res) => {
 
-// ============================
-// DELETE BATCH
-// ============================
-
-app.delete(
-"/api/delete/:id",
-async(req,res)=>{
-
-  try{
+  try {
 
     await Batch.findByIdAndDelete(
       req.params.id
@@ -306,8 +283,7 @@ async(req,res)=>{
 
     res.status(500).json({
 
-      error:
-        err.message
+      error: err.message
 
     });
 
@@ -315,96 +291,66 @@ async(req,res)=>{
 
 });
 
+app.get("/api/play/:batchId/:videoId", async(req, res) => {
 
-// ============================
-// PLAY VIDEO
-// ============================
+  try {
 
-app.get(
-"/api/play/:batch/:video",
-async(req,res)=>{
-
-  try{
+    const {
+      batchId,
+      videoId
+    } = req.params;
 
     const batch =
-      await Batch.findById(
-        req.params.batch
-      );
+      await Batch.findById(batchId);
 
     if(!batch){
 
       return res.status(404).json({
-
-        error:
-        "Batch not found"
-
+        error: "Batch not found"
       });
 
     }
 
     const video =
-      batch.videos.find(
-
-        (v)=>
-
-          v._id.toString() ===
-          req.params.video
-
-      );
+      batch.videos.id(videoId);
 
     if(!video){
 
       return res.status(404).json({
-
-        error:
-        "Video not found"
-
+        error: "Video not found"
       });
 
     }
 
-    // FETCH PLAYER API
+    const realUrl =
+      decrypt(video.url);
+
     const response =
-      await axios({
-
-        method: "GET",
-
-        url: video.url,
-
-        headers: {
-
-          "User-Agent":
-          "Mozilla/5.0"
-
-        }
-
-      });
-
-    const data =
-      response.data;
+      await axios.get(realUrl);
 
     const token =
-      data.video_player_token;
+      response.data.video_player_token;
 
     const player =
-      data.video_player_url;
+      response.data.video_player_url;
 
-    if(!token || !player){
+    if(
+      !token ||
+      !player
+    ){
 
-      return res.status(500).json({
-
-        error:
-        "Player URL Missing"
-
+      return res.status(400).json({
+        error: "Player token missing"
       });
 
     }
 
-    // FINAL URL
     const finalUrl =
-      `${player}${token}`;
+      player + token;
 
     res.json({
+
+      success: true,
 
       url: finalUrl
 
@@ -418,8 +364,7 @@ async(req,res)=>{
 
     res.status(500).json({
 
-      error:
-      "Video API Failed"
+      error: err.message
 
     });
 
@@ -427,18 +372,13 @@ async(req,res)=>{
 
 });
 
-
-// ============================
-// PORT
-// ============================
-
 const PORT =
-process.env.PORT || 5000;
+  process.env.PORT || 5000;
 
-app.listen(PORT,()=>{
+app.listen(PORT, () => {
 
   console.log(
-    "Server Running"
+    `Server Running On Port ${PORT}`
   );
 
 });
