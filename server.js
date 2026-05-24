@@ -17,15 +17,34 @@ app.use(express.urlencoded({
   limit: "50mb"
 }));
 
-mongoose.connect(process.env.MONGODB_URI)
-.then(() => {
-  console.log("MongoDB Connected");
+
+// ============================
+// MONGODB
+// ============================
+
+mongoose.connect(
+  process.env.MONGODB_URI
+)
+.then(()=>{
+
+  console.log(
+    "MongoDB Connected"
+  );
+
 })
-.catch((err) => {
+.catch((err)=>{
+
   console.log(err);
+
 });
 
-const BatchSchema = new mongoose.Schema({
+
+// ============================
+// SCHEMA
+// ============================
+
+const BatchSchema =
+new mongoose.Schema({
 
   title: String,
 
@@ -36,20 +55,32 @@ const BatchSchema = new mongoose.Schema({
 });
 
 const Batch =
-mongoose.model("Batch", BatchSchema);
+mongoose.model(
+  "Batch",
+  BatchSchema
+);
 
-app.get("/", (req,res)=>{
 
-  res.send("Server Running");
+// ============================
+// HOME
+// ============================
+
+app.get("/",(req,res)=>{
+
+  res.send(
+    "Server Running"
+  );
 
 });
 
 
 // ============================
-// UPLOAD TXT
+// UPLOAD
 // ============================
 
-app.post("/api/upload", async(req,res)=>{
+app.post(
+"/api/upload",
+async(req,res)=>{
 
   try{
 
@@ -62,7 +93,10 @@ app.post("/api/upload", async(req,res)=>{
     if(!content){
 
       return res.status(400).json({
-        error: "TXT content missing"
+
+        error:
+        "TXT content missing"
+
       });
 
     }
@@ -78,75 +112,72 @@ app.post("/api/upload", async(req,res)=>{
         !line.includes("https")
       ) return;
 
+      // BRACKETS
       const brackets =
         line.match(/\((.*?)\)/g) || [];
 
-      const cleanBrackets =
+      const clean =
         brackets.map((b)=>
+
           b.replace(/[()]/g,"").trim()
+
         );
 
+      // URL
       const urlMatch =
-        line.match(/https:\/\/[^\s]+/g);
+        line.match(
+          /https:\/\/[^\s]+/g
+        );
 
       if(!urlMatch) return;
 
       const url =
         urlMatch[0];
 
+      // TITLE
       const lectureTitle =
-        line.split(":")[0].trim();
+        line
+        .split(":")[0]
+        .trim();
 
       let subject = "";
       let type = "";
       let chapter = "";
 
-      // ====================
-      // 4 LEVEL
-      // ====================
+      // ========================
+      // AUTO DETECT
+      // ========================
 
-      if(cleanBrackets.length >= 3){
+      if(clean.length >= 3){
 
         subject =
-          cleanBrackets[0];
+          clean[0];
 
         type =
-          cleanBrackets[1];
+          clean[1];
 
         chapter =
-          cleanBrackets[2];
+          clean[2];
 
       }
 
-      // ====================
-      // 3 LEVEL
-      // ====================
-
-      else if(
-        cleanBrackets.length === 2
-      ){
+      else if(clean.length === 2){
 
         subject =
-          cleanBrackets[0];
-
-        chapter =
-          cleanBrackets[1];
+          clean[0];
 
         type =
-          "Lectures";
+          clean[1];
+
+        chapter =
+          "Videos";
 
       }
 
-      // ====================
-      // 2 LEVEL
-      // ====================
-
-      else if(
-        cleanBrackets.length === 1
-      ){
+      else if(clean.length === 1){
 
         subject =
-          cleanBrackets[0];
+          clean[0];
 
         type =
           "Lectures";
@@ -156,6 +187,7 @@ app.post("/api/upload", async(req,res)=>{
 
       }
 
+      // PUSH
       videos.push({
 
         title:
@@ -170,12 +202,13 @@ app.post("/api/upload", async(req,res)=>{
         url,
 
         thumbnail:
-          "https://i.imgur.com/8Km9tLL.png"
+        "https://i.imgur.com/8Km9tLL.png"
 
       });
 
     });
 
+    // SAVE
     const batch =
       new Batch({
 
@@ -193,8 +226,8 @@ app.post("/api/upload", async(req,res)=>{
 
       success: true,
 
-      message:
-        "Upload Successful"
+      total:
+        videos.length
 
     });
 
@@ -206,7 +239,8 @@ app.post("/api/upload", async(req,res)=>{
 
     res.status(500).json({
 
-      error: err.message
+      error:
+        err.message
 
     });
 
@@ -219,7 +253,8 @@ app.post("/api/upload", async(req,res)=>{
 // GET BATCHES
 // ============================
 
-app.get("/api/batches",
+app.get(
+"/api/batches",
 async(req,res)=>{
 
   try{
@@ -234,7 +269,10 @@ async(req,res)=>{
   catch(err){
 
     res.status(500).json({
-      error: err.message
+
+      error:
+        err.message
+
     });
 
   }
@@ -246,7 +284,8 @@ async(req,res)=>{
 // DELETE BATCH
 // ============================
 
-app.delete("/api/delete/:id",
+app.delete(
+"/api/delete/:id",
 async(req,res)=>{
 
   try{
@@ -266,7 +305,10 @@ async(req,res)=>{
   catch(err){
 
     res.status(500).json({
-      error: err.message
+
+      error:
+        err.message
+
     });
 
   }
@@ -292,31 +334,51 @@ async(req,res)=>{
     if(!batch){
 
       return res.status(404).json({
-        error: "Batch not found"
+
+        error:
+        "Batch not found"
+
       });
 
     }
 
     const video =
       batch.videos.find(
+
         (v)=>
+
           v._id.toString() ===
           req.params.video
+
       );
 
     if(!video){
 
       return res.status(404).json({
-        error: "Video not found"
+
+        error:
+        "Video not found"
+
       });
 
     }
 
-    const apiUrl =
-      video.url;
-
+    // FETCH PLAYER API
     const response =
-      await axios.get(apiUrl);
+      await axios({
+
+        method: "GET",
+
+        url: video.url,
+
+        headers: {
+
+          "User-Agent":
+          "Mozilla/5.0"
+
+        }
+
+      });
 
     const data =
       response.data;
@@ -327,6 +389,18 @@ async(req,res)=>{
     const player =
       data.video_player_url;
 
+    if(!token || !player){
+
+      return res.status(500).json({
+
+        error:
+        "Player URL Missing"
+
+      });
+
+    }
+
+    // FINAL URL
     const finalUrl =
       `${player}${token}`;
 
@@ -344,7 +418,8 @@ async(req,res)=>{
 
     res.status(500).json({
 
-      error: err.message
+      error:
+      "Video API Failed"
 
     });
 
@@ -360,10 +435,10 @@ async(req,res)=>{
 const PORT =
 process.env.PORT || 5000;
 
-app.listen(PORT, ()=>{
+app.listen(PORT,()=>{
 
   console.log(
-    `Server Running`
+    "Server Running"
   );
 
 });
